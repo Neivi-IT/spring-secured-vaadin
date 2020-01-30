@@ -1,8 +1,11 @@
 package org.vaadin.paul.spring.app.security;
 
+import io.tokenchannel.ChannelType;
+import io.tokenchannel.TokenChannel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -13,104 +16,113 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.vaadin.paul.spring.ui.views.LoginView;
 
+import java.util.Locale;
+
 /**
  * Configures spring security, doing the following:
  * <li>Bypass security checks for static resources,</li>
  * <li>Restrict access to the application, allowing only logged in users,</li>
  * <li>Set up the login form</li>
-
  */
 @EnableWebSecurity
 @Configuration
 public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
-	private static final String LOGOUT_SUCCESS_URL = "/";
+    private static final String LOGOUT_SUCCESS_URL = "/";
 
-	@Bean
-	@Override
-	public AuthenticationManager authenticationManagerBean() throws Exception {
-		return super.authenticationManagerBean();
-	}
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
 
-	@Bean
-	public CustomRequestCache requestCache() {
-		return new CustomRequestCache();
-	}
+    @Bean
+    public AuthenticationProvider authenticationProvider(TokenChannel tokenChannel,
+                                UserDetailsService userDetailsService) throws Exception {
+        return new TokenChannelPasswordlessAuthenticationProvider(tokenChannel,
+                "fi-FI", ChannelType.TELEGRAM, userDetailsService);
+    }
 
-	/**
-	 * Require login to access internal pages and configure login form.
-	 */
-	@Override
-	protected void configure(HttpSecurity http) throws Exception {
-		// Not using Spring CSRF here to be able to use plain HTML for the login page
-		http.csrf().disable()
+    @Bean
+    @Override
+    public UserDetailsService userDetailsService() {
+        UserDetails user =
+                User.withUsername("994285665")
+                        .password("{noop}password")
+                        .roles("USER")
+                        .build();
 
-				// Register our CustomRequestCache, that saves unauthorized access attempts, so
-				// the user is redirected after login.
-				.requestCache().requestCache(requestCache())
+        return new InMemoryUserDetailsManager(user);
+    }
 
-				// Restrict access to our application.
-				.and().authorizeRequests()
 
-				// Allow all flow internal requests.
-				.requestMatchers(SecurityUtils::isFrameworkInternalRequest).permitAll()
+    @Bean
+    public CustomRequestCache requestCache() {
+        return new CustomRequestCache();
+    }
 
-				// Allow all requests by logged in users.
-				.anyRequest().authenticated()
+    /**
+     * Require login to access internal pages and configure login form.
+     */
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        // Not using Spring CSRF here to be able to use plain HTML for the login page
+        http.csrf().disable()
 
-				// Configure the login page.
-				.and().formLogin().loginPage("/" + LoginView.ROUTE).permitAll()
+                // Register our CustomRequestCache, that saves unauthorized access attempts, so
+                // the user is redirected after login.
+                .requestCache().requestCache(requestCache())
 
-				// Configure logout
-				.and().logout().logoutSuccessUrl(LOGOUT_SUCCESS_URL);
-	}
+                // Restrict access to our application.
+                .and().authorizeRequests()
 
-	@Bean
-	@Override
-	public UserDetailsService userDetailsService() {
-		UserDetails user =
-				User.withUsername("user")
-						.password("{noop}password")
-						.roles("USER")
-						.build();
+                // Allow all flow internal requests.
+                .requestMatchers(SecurityUtils::isFrameworkInternalRequest).permitAll()
 
-		return new InMemoryUserDetailsManager(user);
-	}
+                // Allow all requests by logged in users.
+                .anyRequest().authenticated()
 
-	/**
-	 * Allows access to static resources, bypassing Spring security.
-	 */
-	@Override
-	public void configure(WebSecurity web) {
-		web.ignoring().antMatchers(
-				// Vaadin Flow static resources
-				"/VAADIN/**",
+                // Configure the login page.
+                .and().formLogin().loginPage("/" + LoginView.ROUTE).permitAll()
 
-				// the standard favicon URI
-				"/favicon.ico",
+                // Configure logout
+                .and().logout().logoutSuccessUrl(LOGOUT_SUCCESS_URL);
+    }
 
-				// the robots exclusion standard
-				"/robots.txt",
+    /**
+     * Allows access to static resources, bypassing Spring security.
+     */
+    @Override
+    public void configure(WebSecurity web) {
+        web.ignoring().antMatchers(
+                // Vaadin Flow static resources
+                "/VAADIN/**",
 
-				// web application manifest
-				"/manifest.webmanifest",
-				"/sw.js",
-				"/offline-page.html",
+                // the standard favicon URI
+                "/favicon.ico",
 
-				// icons and images
-				"/icons/**",
-				"/images/**",
+                // the robots exclusion standard
+                "/robots.txt",
 
-				// (development mode) static resources
-				"/frontend/**",
+                // web application manifest
+                "/manifest.webmanifest",
+                "/sw.js",
+                "/offline-page.html",
 
-				// (development mode) webjars
-				"/webjars/**",
+                // icons and images
+                "/icons/**",
+                "/images/**",
 
-				// (development mode) H2 debugging console
-				"/h2-console/**",
+                // (development mode) static resources
+                "/frontend/**",
 
-				// (production mode) static resources
-				"/frontend-es5/**", "/frontend-es6/**");
-	}
+                // (development mode) webjars
+                "/webjars/**",
+
+                // (development mode) H2 debugging console
+                "/h2-console/**",
+
+                // (production mode) static resources
+                "/frontend-es5/**", "/frontend-es6/**");
+    }
 }
