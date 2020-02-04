@@ -5,26 +5,31 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinService;
+import com.vaadin.flow.server.VaadinServletRequest;
 import io.tokenchannel.exceptions.*;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.util.StringUtils;
 import org.vaadin.paul.spring.app.security.ChallengeCreatedException;
 import org.vaadin.paul.spring.app.security.CustomRequestCache;
+import org.vaadin.paul.spring.app.security.SecondStepAuthenticationDetails;
 
 @Route(value = LoginView.ROUTE)
 @PageTitle("Login")
 public class LoginView extends VerticalLayout {
 
     public static final String ROUTE = "login";
-    private final TextField identifierTextField = new TextField();
-    private final TextField authCodeTextField = new TextField();
+    private final TextField usernameTextField = new TextField();
+    private final PasswordField passwordTextField = new PasswordField();
+    private final TextField otpTokenTextField = new TextField();
+
     private final Button submitButton = new Button("Login");
 
     /**
@@ -35,18 +40,22 @@ public class LoginView extends VerticalLayout {
     public LoginView(final AuthenticationManager authenticationManager,
                      final CustomRequestCache requestCache) {
 
-        identifierTextField.setLabel("Dime tu id");
-        authCodeTextField.setPlaceholder("Validation Code");
-        authCodeTextField.setVisible(false);
+        usernameTextField.setLabel("Dime tu id");
+        passwordTextField.setLabel("Contraseña");
+        otpTokenTextField.setLabel("OTP Token");
+        otpTokenTextField.setVisible(false);
 
         submitButton.addClickListener(buttonClickEvent -> {
 
             try {
                 // try to authenticate with given credentials, should always return not null or throw an {@link AuthenticationException}
-                String identifier = StringUtils.hasText(this.challengeId) ? challengeId : identifierTextField.getValue();
+                UsernamePasswordAuthenticationToken authenticationToken =
+                        new UsernamePasswordAuthenticationToken(usernameTextField.getValue(),
+                                passwordTextField.getValue());
+                authenticationToken.setDetails(
+                        new SecondStepAuthenticationDetails(this.challengeId, otpTokenTextField.getValue()));
                 final Authentication authentication = authenticationManager
-                        .authenticate(new UsernamePasswordAuthenticationToken(identifier, authCodeTextField.getValue()));
-
+                        .authenticate(authenticationToken);
                 // if authentication was successful we will update the security context and redirect to the page requested first
                 SecurityContextHolder.getContext().setAuthentication(authentication);
                 UI.getCurrent().navigate(requestCache.resolveRedirectUrl());
@@ -58,8 +67,9 @@ public class LoginView extends VerticalLayout {
         });
 
         this.setAlignItems(Alignment.CENTER);
-        this.add(identifierTextField);
-        this.add(authCodeTextField);
+        this.add(usernameTextField);
+        this.add(passwordTextField);
+        this.add(otpTokenTextField);
         this.add(submitButton);
     }
 
@@ -77,7 +87,7 @@ public class LoginView extends VerticalLayout {
         String message;
         if (tce instanceof InvalidIdentifierException) {
             message = "Invalid Identifier";
-            this.authCodeTextField.setValue("");
+            this.passwordTextField.setValue("");
         } else if (tce instanceof OutOfBalanceException) {
             // Programatically notify app admin
             message = "Call support";
@@ -88,7 +98,7 @@ public class LoginView extends VerticalLayout {
             this.cleanChallenge();
         } else if (tce instanceof InvalidCodeException) {
             message = "Invalid code. Try again!";
-            this.authCodeTextField.setValue("");
+            this.otpTokenTextField.setValue("");
         } else if (tce instanceof ChallengeClosedException ||
                 tce instanceof MaxAttemptsExceededException || tce instanceof ChallengeExpiredException) {
             message = "Challenge closed. ";
@@ -96,7 +106,7 @@ public class LoginView extends VerticalLayout {
         } else if (tce instanceof ChallengeNotFoundException) {
             // Hiding user does not exist
             message = "Bad Credentials";
-            this.authCodeTextField.setValue("");
+            this.cleanChallenge();
         } else {
             if (tce instanceof BadRequestException) {
                 System.out.println(String.format("BadRequest:  %s", ((BadRequestException) tce).getErrorInfo().toString()));
@@ -109,17 +119,19 @@ public class LoginView extends VerticalLayout {
 
     private void handleChallengeCreated(String requestId) {
         this.challengeId = requestId;
-        this.identifierTextField.setEnabled(false);
-        this.authCodeTextField.setValue("");
-        this.authCodeTextField.setVisible(true);
+        this.usernameTextField.setEnabled(false);
+        this.passwordTextField.setEnabled(false);
+        this.otpTokenTextField.setVisible(true);
     }
 
     private void cleanChallenge() {
         this.challengeId = "";
-        this.identifierTextField.setValue("");
-        this.authCodeTextField.setValue("");
-        this.identifierTextField.setEnabled(true);
-        this.authCodeTextField.setVisible(false);
+        this.usernameTextField.setValue("");
+        this.passwordTextField.setValue("");
+        this.otpTokenTextField.setValue("");
+        this.usernameTextField.setEnabled(true);
+        this.passwordTextField.setEnabled(true);
+        this.otpTokenTextField.setVisible(false);
     }
 
     private void showErrorMessage(String message) {

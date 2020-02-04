@@ -10,13 +10,14 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.vaadin.paul.spring.ui.views.LoginView;
 
-import java.util.Locale;
+import java.util.Arrays;
 
 /**
  * Configures spring security, doing the following:
@@ -37,22 +38,33 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     }
 
     @Bean
-    public AuthenticationProvider authenticationProvider(TokenChannel tokenChannel,
-                                UserDetailsService userDetailsService) throws Exception {
-        return new TokenChannelPasswordlessAuthenticationProvider(tokenChannel,
-                "fi-FI", ChannelType.TELEGRAM, userDetailsService);
+    public AuthenticationProvider authenticationProvider(TokenChannel tokenChannel) {
+        return new TokenChannel2FAAuthenticationProvider(this.userDetailsService(),
+                NoOpPasswordEncoder.getInstance(),
+                tokenChannel, "fi", ChannelType.VOICE);
     }
 
     @Bean
     @Override
     public UserDetailsService userDetailsService() {
-        UserDetails user =
-                User.withUsername("994285665")
-                        .password("{noop}password")
-                        .roles("USER")
-                        .build();
+        final UserDetails user = User.builder()
+                .username("oalles.dev@gmail.com")
+                .password("3daughters")
+                .language("es")
+                .phonenumber("+34600000000")
+                .authorities(Arrays.asList(new SimpleGrantedAuthority("USER")))
+                .accountNonLocked(true)
+                .accountNonExpired(true)
+                .credentialsNonExpired(true)
+                .enabled(true)
+                .build();
 
-        return new InMemoryUserDetailsManager(user);
+        return (String username) -> {
+            if (username.equals(user.getUsername())) {
+                return user;
+            }
+            throw new UsernameNotFoundException(String.format("%s not found", username));
+        };
     }
 
 
